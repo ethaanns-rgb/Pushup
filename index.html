@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Push-up Counter</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: #0a0a0a; color: white; font-family: Arial, sans-serif; min-height: 100vh; }
+
+        #start-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            gap: 20px;
+            text-align: center;
+            padding: 20px;
+        }
+
+        #start-screen h1 { font-size: 32px; color: #f39c12; }
+        #start-screen p { color: #aaa; font-size: 14px; max-width: 300px; }
+
+        #start-btn {
+            background: #f39c12;
+            color: black;
+            border: none;
+            border-radius: 25px;
+            padding: 15px 40px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        #app { display: none; position: relative; width: 100vw; height: 100vh; overflow: hidden; }
+
+        video, canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            object-fit: cover;
+        }
+        canvas { z-index: 2; }
+
+        #ui {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 3;
+            pointer-events: none;
+        }
+
+        /* TOP LEFT - Niveau */
+        #level-box {
+            position: absolute;
+            top: 15px; left: 15px;
+            background: rgba(0,0,0,0.75);
+            border: 2px solid #f39c12;
+            border-radius: 14px;
+            padding: 10px 14px;
+            min-width: 150px;
+        }
+        #level-num { font-size: 11px; color: #aaa; }
+        #level-name { font-size: 17px; font-weight: bold; color: #f39c12; margin: 2px 0 6px; }
+        #xp-bar-bg { background: #333; border-radius: 10px; height: 7px; }
+        #xp-bar { background: #f39c12; border-radius: 10px; height: 7px; width: 0%; transition: width 0.4s; }
+        #xp-label { font-size: 10px; color: #888; margin-top: 3px; }
+
+        /* TOP CENTER - Total */
+        #total-box {
+            position: absolute;
+            top: 15px; left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.65);
+            border-radius: 10px;
+            padding: 6px 14px;
+            font-size: 12px;
+            color: #aaa;
+            white-space: nowrap;
+        }
+
+        /* CENTER - Compteur */
+        #counter-box {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+        #counter {
+            font-size: 90px;
+            font-weight: bold;
+            line-height: 1;
+            text-shadow: 0 0 30px rgba(243,156,18,0.5);
+            color: white;
+        }
+        #status-text {
+            font-size: 14px;
+            color: #aaa;
+            margin-top: 5px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        /* FEEDBACK FLASH */
+        #feedback {
+            position: absolute;
+            top: 35%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 40px;
+            font-weight: bold;
+            opacity: 0;
+            pointer-events: none;
+            text-shadow: 0 0 20px currentColor;
+            transition: opacity 0.2s;
+        }
+
+        /* LEVEL UP POPUP */
+        #levelup-popup {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.92);
+            border: 3px solid #f39c12;
+            border-radius: 20px;
+            padding: 30px 40px;
+            text-align: center;
+            display: none;
+            z-index: 10;
+        }
+        #levelup-popup h2 { color: #f39c12; font-size: 26px; }
+        #levelup-popup p { color: white; font-size: 18px; margin-top: 8px; }
+
+        /* BOTTOM BUTTONS */
+        #bottom-bar {
+            position: absolute;
+            bottom: 20px; width: 100%;
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            pointer-events: all;
+        }
+        button.ctrl-btn {
+            background: rgba(0,0,0,0.8);
+            color: white;
+            border: 2px solid #555;
+            border-radius: 25px;
+            padding: 12px 22px;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        #reset-btn { border-color: #e74c3c; color: #e74c3c; }
+        #save-btn { border-color: #2ecc71; color: #2ecc71; }
+    </style>
+</head>
+<body>
+
+<!-- ÉCRAN DE DÉMARRAGE -->
+<div id="start-screen">
+    <h1>💪 Push-up Counter</h1>
+    <p>Place ton téléphone de côté pour voir ton profil complet pendant les pompes</p>
+    <button id="start-btn">Démarrer la caméra</button>
+</div>
+
+<!-- APP PRINCIPALE -->
+<div id="app">
+    <video id="video" autoplay playsinline muted></video>
+    <canvas id="canvas"></canvas>
+
+    <div id="ui">
+        <!-- Niveau -->
+        <div id="level-box">
+            <div id="level-num">Niveau 1</div>
+            <div id="level-name">Débutant</div>
+            <div id="xp-bar-bg"><div id="xp-bar"></div></div>
+            <div id="xp-label">0 / 5 pompes</div>
+        </div>
+
+        <!-- Total session -->
+        <div id="total-box">Total : <span id="total-count">0</span> pompes</div>
+
+        <!-- Compteur central -->
+        <div id="counter-box">
+            <div id="counter">0</div>
+            <div id="status-text">En attente...</div>
+        </div>
+
+        <!-- Feedback flash -->
+        <div id="feedback">+1 💪</div>
+
+        <!-- Level up popup -->
+        <div id="levelup-popup">
+            <h2>🏆 LEVEL UP !</h2>
+            <p id="levelup-text">Tu passes niveau 2</p>
+        </div>
+
+        <!-- Boutons -->
+        <div id="bottom-bar">
+            <button class="ctrl-btn" id="save-btn">💾 Sauvegarder</button>
+            <button class="ctrl-btn" id="reset-btn">🔄 Reset</button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+
+<script>
+// ══════════════════════════════════
+// SYSTÈME DE NIVEAUX (paliers test : 1 pompe = 1 niveau)
+// ══════════════════════════════════
+const LEVELS = [
+    { name: "Débutant",       min: 0  },
+    { name: "Apprenti",       min: 1  },
+    { name: "Guerrier",       min: 2  },
+    { name: "Combattant",     min: 3  },
+    { name: "Athlète",        min: 4  },
+    { name: "Champion",       min: 5  },
+    { name: "Elite",          min: 6  },
+    { name: "Spartiate",      min: 7  },
+    { name: "Titan",          min: 8  },
+    { name: "Légende",        min: 9  },
+    { name: "DIEU DES POMPES",min: 10 },
+];
+
+// ══════════════════════════════════
+// STATE
+// ══════════════════════════════════
+let count = 0;
+let totalAllTime = parseInt(localStorage.getItem('total_pushups') || '0');
+let position = null; // 'up' | 'down'
+let lastLevel = 0;
+
+// ══════════════════════════════════
+// VOIX
+// ══════════════════════════════════
+function speak(text) {
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'fr-FR';
+    u.volume = 1;
+    u.rate = 1.1;
+    speechSynthesis.speak(u);
+}
+
+// ══════════════════════════════════
+// UI
+// ══════════════════════════════════
+function getLevelIndex(n) {
+    let idx = 0;
+    for (let i = 0; i < LEVELS.length; i++) {
+        if (n >= LEVELS[i].min) idx = i;
+    }
+    return idx;
+}
+
+function updateUI() {
+    document.getElementById('counter').textContent = count;
+    document.getElementById('total-count').textContent = totalAllTime;
+
+    const idx = getLevelIndex(count);
+    const level = LEVELS[idx];
+    const nextLevel = LEVELS[idx + 1];
+
+    document.getElementById('level-num').textContent = `Niveau ${idx + 1}`;
+    document.getElementById('level-name').textContent = level.name;
+
+    if (nextLevel) {
+        const cur = count - level.min;
+        const needed = nextLevel.min - level.min;
+        const pct = Math.min((cur / needed) * 100, 100);
+        document.getElementById('xp-bar').style.width = pct + '%';
+        document.getElementById('xp-label').textContent = `${cur} / ${needed} pompes`;
+    } else {
+        document.getElementById('xp-bar').style.width = '100%';
+        document.getElementById('xp-label').textContent = 'MAX LEVEL !';
+    }
+
+    // Level up ?
+    if (idx > lastLevel) {
+        lastLevel = idx;
+        showLevelUp(idx + 1, level.name);
+        speak(`Niveau ${idx + 1} ! ${level.name} !`);
+    }
+}
+
+function showFeedback() {
+    const el = document.getElementById('feedback');
+    el.style.opacity = '1';
+    el.style.color = '#2ecc71';
+    setTimeout(() => el.style.opacity = '0', 600);
+}
+
+function showLevelUp(num, name) {
+    const popup = document.getElementById('levelup-popup');
+    document.getElementById('levelup-text').textContent = `Niveau ${num} — ${name}`;
+    popup.style.display = 'block';
+    setTimeout(() => popup.style.display = 'none', 2500);
+}
+
+// ══════════════════════════════════
+// DÉTECTION ANGLE COUDE
+// ══════════════════════════════════
+function angle(A, B, C) {
+    const rad = Math.atan2(C.y - B.y, C.x - B.x) - Math.atan2(A.y - B.y, A.x - B.x);
+    let deg = Math.abs(rad * 180 / Math.PI);
+    if (deg > 180) deg = 360 - deg;
+    return deg;
+}
+
+function onResults(results) {
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+    canvas.width = canvas.offsetWidth;
+    canvas.height = canvas.offsetHeight;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    if (!results.poseLandmarks) return;
+
+    drawConnectors(ctx, results.poseLandmarks, POSE_CONNECTIONS, { color: '#00ff00', lineWidth: 2 });
+    drawLandmarks(ctx, results.poseLandmarks, { color: '#ff0000', lineWidth: 1, radius: 3 });
+
+    const lm = results.poseLandmarks;
+    const shoulder = lm[11];
+    const elbow = lm[13];
+    const wrist = lm[15];
+
+    if (!shoulder || !elbow || !wrist) return;
+
+    const elbowAngle = angle(shoulder, elbow, wrist);
+
+    // Statut
+    const statusEl = document.getElementById('status-text');
+    if (elbowAngle < 90) {
+        statusEl.textContent = '⬇️ BAS';
+        if (position !== 'down') position = 'down';
+    } else if (elbowAngle > 150) {
+        statusEl.textContent = '⬆️ HAUT';
+        if (position === 'down') {
+            position = 'up';
+            count++;
+            totalAllTime++;
+            speak(count.toString());
+            showFeedback();
+            updateUI();
+        }
+    } else {
+        statusEl.textContent = '↕️ EN MOUVEMENT';
+    }
+}
+
+// ══════════════════════════════════
+// CAMÉRA + MEDIAPIPE
+// ══════════════════════════════════
+document.getElementById('start-btn').addEventListener('click', async () => {
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+
+    const video = document.getElementById('video');
+
+    const pose = new Pose({
+        locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`
+    });
+
+    pose.setOptions({
+        modelComplexity: 1,
+        smoothLandmarks: true,
+        minDetectionConfidence: 0.6,
+        minTrackingConfidence: 0.6
+    });
+
+    pose.onResults(onResults);
+
+    const camera = new Camera(video, {
+        onFrame: async () => { await pose.send({ image: video }); },
+        width: 640, height: 480
+    });
+
+    camera.start();
+    updateUI();
+    speak("C'est parti !");
+});
+
+// ══════════════════════════════════
+// BOUTONS
+// ══════════════════════════════════
+document.getElementById('reset-btn').addEventListener('click', () => {
+    count = 0;
+    position = null;
+    lastLevel = 0;
+    document.getElementById('status-text').textContent = 'En attente...';
+    updateUI();
+    speak("Compteur remis à zéro");
+});
+
+document.getElementById('save-btn').addEventListener('click', () => {
+    localStorage.setItem('total_pushups', totalAllTime);
+    speak(`Sauvegardé ! Total : ${totalAllTime} pompes`);
+    const btn = document.getElementById('save-btn');
+    btn.textContent = '✅ Sauvegardé !';
+    setTimeout(() => btn.textContent = '💾 Sauvegarder', 2000);
+});
+
+// Init UI avec total sauvegardé
+window.addEventListener('load', () => {
+    document.getElementById('total-count').textContent = totalAllTime;
+});
+</script>
+
+</body>
+</html>
